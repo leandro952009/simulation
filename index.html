@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Phone Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for a modern look */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e0e0e0; /* Light gray background */
+        }
+
+        /* Basic animation for loading spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-fast {
+            animation: spin 0.7s linear infinite;
+        }
+
+        /* Hide scrollbar for browser view - KEEP THIS FOR BROWSER, REMOVE FOR CHAT */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+
+        /* Styles for app icons */
+        .app-icon {
+            @apply flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer transition-transform duration-200 hover:scale-105;
+        }
+        .app-icon-bg {
+            @apply w-16 h-16 rounded-xl flex items-center justify-center shadow-md; /* Slightly larger icons */
+        }
+        .app-icon-label {
+            @apply text-sm text-gray-700 mt-2 truncate w-full text-center; /* Slightly larger text */
+        }
+
+        /* App drawer styles - simplified for only two apps */
+        #app-drawer-interface {
+            background-color: #f9f9f9;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60%; /* Adjust as needed */
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
+            padding: 16px;
+            overflow-y: auto;
+            z-index: 50; /* Ensure it's above other content */
+            transform: translateY(100%); /* Hidden by default */
+            transition: transform 0.3s ease-in-out;
+        }
+        #app-drawer-interface.open {
+            transform: translateY(0%);
+        }
+        #app-drawer-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px; /* Increased gap */
+            padding-bottom: 80px; /* To account for the home indicator */
+        }
+        #open-app-drawer-button {
+            @apply w-16 h-16 rounded-full flex items-center justify-center cursor-pointer;
+            background-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        #home-screen-bottom-bar {
+            @apply flex justify-around items-center bg-white/80 backdrop-blur-md rounded-full p-4 shadow-lg mt-auto; /* Frosted glass effect */
+        }
+
+        /* Chessboard.js specific styles (kept in case user adds chess back later, but not used now) */
+        .board-container {
+            width: 100%;
+            max-width: 400px; /* Max width for the board */
+            margin: 20px auto; /* Center the board */
+        }
+        /* Ensure chessboard.js styles are loaded */
+        @import url("https://unpkg.com/@chrisoakley/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css");
+
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="relative bg-gray-900 w-full max-w-2xl h-[900px] rounded-3xl shadow-2xl flex flex-col overflow-hidden border-8 border-gray-800">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-1/4 h-6 bg-gray-800 rounded-b-xl z-10"></div>
+        <div class="absolute right-0 top-1/3 w-2 h-16 bg-gray-700 rounded-r-md"></div>
+        <div class="absolute left-0 top-1/4 w-2 h-10 bg-gray-700 rounded-l-md"></div>
+        <div class="absolute left-0 top-[calc(1/4*100%+14px)] w-2 h-10 bg-gray-700 rounded-l-md"></div>
+
+        <div id="phone-screen" class="flex-1 bg-white rounded-2xl m-2 overflow-hidden flex flex-col">
+            <div class="bg-gray-100 p-3 flex justify-between items-center text-base text-gray-700 border-b border-gray-200">
+                <span id="currentTime" class="font-semibold"></span>
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7"></path></svg>
+                    <span>Wi-Fi</span>
+                    <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    <span>100%</span>
+                </div>
+            </div>
+
+            <div id="home-screen-interface" class="flex-col flex-1 bg-gradient-to-br from-blue-200 to-purple-300 p-8 relative">
+                <div class="flex-1 grid grid-cols-4 gap-8 content-start pt-12">
+                    <div class="app-icon" data-app="google">
+                        <div class="app-icon-bg bg-white shadow-lg">
+                            <svg class="w-12 h-12 text-blue-600" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </div>
+                        <span class="app-icon-label">Google</span>
+                    </div>
+                    <div class="app-icon" data-app="gemini">
+                        <div class="app-icon-bg bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg">
+                            <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5V13H7v-2h4V6.5L16 12l-5 5.5z"></path></svg>
+                        </div>
+                        <span class="app-icon-label">Gemini</span>
+                    </div>
+                    <div class="app-icon" data-app="notes">
+                        <div class="app-icon-bg bg-gradient-to-br from-yellow-400 to-orange-500 shadow-lg">
+                            <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"></path></svg>
+                        </div>
+                        <span class="app-icon-label">Notes</span>
+                    </div>
+                     <div class="app-icon" data-app="imagegen">
+                        <div class="app-icon-bg bg-gradient-to-br from-green-400 to-teal-500 shadow-lg">
+                            <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 4V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-2l-3-3-3 3-3-3-3 3V7h8a1 1 0 0 1 1 1v2l3 3z"/></svg>
+                        </div>
+                        <span class="app-icon-label">Image Gen</span>
+                    </div>
+                </div>
+                <div id="home-screen-bottom-bar">
+                    <div class="app-icon w-16 h-16" data-app="google">
+                        <svg class="w-10 h-10 text-gray-700" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    </div>
+                    <div class="app-icon w-16 h-16" data-app="gemini">
+                        <svg class="w-8 h-8 text-gray-700" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5V13H7v-2h4V6.5L16 12l-5 5.5z"></path></svg>
+                    </div>
+                     <div class="app-icon w-16 h-16" data-app="imagegen">
+                        <svg class="w-8 h-8 text-gray-700" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 4V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-2l-3-3-3 3-3-3-3 3V7h8a1 1 0 0 1 1 1v2l3 3z"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <div id="google-interface" class="hidden flex-col flex-1">
+                <div class="p-5 bg-white border-b border-gray-200 shadow-sm">
+                    <div class="flex items-center bg-gray-100 rounded-full px-5 py-3 shadow-inner focus-within:ring-2 focus-within:ring-blue-400 focus-within:ring-opacity-50 transition-all duration-200">
+                        <svg class="w-6 h-6 text-gray-500 mr-3" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></svg>
+                        <input type="text" id="searchInput" placeholder="Search Google..." class="flex-1 bg-transparent outline-none text-gray-800 text-lg" />
+                        <button id="searchButton" class="ml-3 bg-blue-500 hover:bg-blue-600 text-white text-base font-semibold py-2 px-4 rounded-full transition duration-200 shadow-md hover:shadow-lg">
+                            Search
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white px-5 py-3 border-b border-gray-200 overflow-x-auto whitespace-nowrap hide-scrollbar">
+                    <div class="flex space-x-6 text-base text-gray-700">
+                        <span class="font-bold text-blue-700 border-b-2 border-blue-700 pb-2">All</span>
+                        <span class="hover:text-blue-700 cursor-pointer pb-2 transition-colors duration-200">Shopping</span>
+                        <span class="hover:text-blue-700 cursor-pointer pb-2 transition-colors duration-200">Images</span>
+                        <span class="hover:text-blue-700 cursor-pointer pb-2 transition-colors duration-200">News</span>
+                    </div>
+                </div>
+
+                <div id="searchResults" class="flex-1 overflow-y-auto p-5 bg-gray-50 hide-scrollbar">
+                    <p class="text-gray-500 text-center mt-12 text-lg">Type something into the search bar and press "Search"!</p>
+                </div>
+            </div>
+
+            <div id="browser-interface" class="hidden flex-col flex-1 bg-white">
+                <div class="bg-gray-100 p-4 flex items-center justify-between border-b border-gray-200 shadow-sm">
+                    <button id="backButton" class="text-blue-600 hover:text-blue-800 font-semibold flex items-center text-base transition-colors duration-200">
+                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                        Back to Search
+                    </button>
+                    <span id="browserUrl" class="text-sm text-gray-700 truncate max-w-[60%] font-medium"></span>
+                </div>
+                <div id="browserContent" class="flex-1 overflow-y-auto p-5 hide-scrollbar">
+                    <div id="browserLoading" class="flex flex-col items-center justify-center h-full hidden">
+                        <div class="w-14 h-14 border-4 border-green-500 border-t-transparent rounded-full animate-spin-fast"></div>
+                        <p class="mt-5 text-gray-700 text-xl">Loading page content...</p>
+                    </div>
+                    <div id="browserPageText" class="text-gray-800 leading-relaxed text-lg">
+                        </div>
+                </div>
+            </div>
+
+            <div id="gemini-app-interface" class="hidden flex-col flex-1 bg-white relative">
+                <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-5 text-2xl font-bold shadow-md">Gemini Chat</div>
+                <div class="p-4 border-b border-gray-200 flex items-center bg-white shadow-lg">
+                    <input type="text" id="geminiInput" class="flex-1 rounded-full bg-gray-100 px-5 py-3 mr-3 focus:outline-none focus:ring-2 focus:ring-purple-400 shadow-inner text-base" placeholder="Ask Gemini anything...">
+                    <button id="sendGeminiButton" class="bg-purple-500 hover:bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-md transition duration-200 hover:shadow-lg">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                    </button>
+                </div>
+                <div id="geminiChatHistoryContainer" class="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col-reverse">
+                    <div id="geminiChatHistory" class="flex flex-col space-y-3">
+                        </div>
+                </div>
+                <button id="scrollToBottomGemini" class="absolute bottom-6 right-6 bg-purple-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-xl transition-transform duration-200 hover:scale-110">
+                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5V13H7v-2h4V6.5L16 12l-5 5.5z"></path></svg>
+                </button>
+            </div>
+
+            <div id="notes-app-interface" class="hidden flex-col flex-1 bg-white">
+                <div class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-5 text-2xl font-bold shadow-md">Smart Notes</div>
+                <div class="flex-1 flex flex-col p-5">
+                    <textarea id="notesInput" class="flex-1 w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner resize-none text-base" placeholder="Write your notes here..."></textarea>
+                    <div class="flex space-x-3 mt-5 justify-center">
+                        <button id="summarizeNotesButton" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-6 rounded-full shadow-lg transition duration-200 hover:scale-105 flex items-center text-lg">
+                            ✨ Summarize
+                        </button>
+                        <button id="extractActionItemsButton" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-lg transition duration-200 hover:scale-105 flex items-center text-lg">
+                            ✨ Action Items
+                        </button>
+                    </div>
+                    <div id="notesResult" class="mt-5 p-4 bg-gray-100 rounded-lg border border-gray-200 overflow-y-auto hide-scrollbar max-h-48 shadow-inner">
+                        <p class="text-gray-700 text-base">Results will appear here.</p>
+                    </div>
+                </div>
+                <button id="scrollToBottomNotes" class="absolute bottom-24 right-6 bg-orange-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-xl transition-transform duration-200 hover:scale-110">
+                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5V13H7v-2h4V6.5L16 12l-5 5.5z"></path></svg>
+                </button>
+            </div>
+
+            <div id="imagegen-app-interface" class="hidden flex-col flex-1 bg-white">
+                <div class="bg-gradient-to-r from-green-500 to-teal-600 text-white p-5 text-2xl font-bold shadow-md">Image Generator</div>
+                <div class="flex-1 flex flex-col p-5">
+                    <textarea id="imagePromptInput" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 shadow-inner resize-none text-base h-32" placeholder="Describe the image you want to generate (e.g., 'A futuristic city at sunset')."></textarea>
+                    <button id="generateImageButton" class="mt-5 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-full shadow-lg transition duration-200 hover:scale-105 flex items-center justify-center text-lg">
+                        🎨 Generate Image
+                    </button>
+                    <div id="imageResultContainer" class="mt-5 p-4 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center min-h-[200px] shadow-inner overflow-hidden">
+                        <p id="imagePlaceholder" class="text-gray-700 text-base">Generated image will appear here.</p>
+                        <img id="generatedImage" src="" alt="Generated Image" class="hidden max-w-full max-h-full object-contain rounded-lg">
+                        <div id="imageLoading" class="flex flex-col items-center justify-center hidden">
+                            <div class="w-14 h-14 border-4 border-green-500 border-t-transparent rounded-full animate-spin-fast"></div>
+                            <p class="mt-3 text-gray-700">Generating image...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingIndicator" class="hidden absolute inset-0 bg-white bg-opacity-80 flex flex-col items-center justify-center z-20">
+                <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin-fast"></div>
+                <p class="mt-5 text-gray-700 text-xl font-semibold">Loading...</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-100 h-10 flex items-center justify-center border-t border-gray-200">
+            <div id="homeIndicator" class="w-32 h-2 bg-gray-300 rounded-full cursor-pointer"></div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const currentTimeSpan = document.getElementById('currentTime');
+
+        const homeScreenInterface = document.getElementById('home-screen-interface');
+        const googleInterface = document.getElementById('google-interface');
+        const browserInterface = document.getElementById('browser-interface');
+        const geminiAppInterface = document.getElementById('gemini-app-interface');
+        const notesAppInterface = document.getElementById('notes-app-interface');
+        const imageGenAppInterface = document.getElementById('imagegen-app-interface');
+
+
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const browserUrlSpan = document.getElementById('browserUrl');
+        const backButton = document.getElementById('backButton');
+        const browserLoadingDiv = document.getElementById('browserLoading');
+        const browserPageTextDiv = document.getElementById('browserPageText');
+
+        const geminiInput = document.getElementById('geminiInput');
+        const sendGeminiButton = document.getElementById('sendGeminiButton');
+        const geminiChatHistoryContainer = document.getElementById('geminiChatHistoryContainer');
+        const geminiChatHistory = document.getElementById('geminiChatHistory');
+        const scrollToBottomGemini = document.getElementById('scrollToBottomGemini');
+
+        const notesInput = document.getElementById('notesInput');
+        const summarizeNotesButton = document.getElementById('summarizeNotesButton');
+        const extractActionItemsButton = document.getElementById('extractActionItemsButton');
+        const notesResult = document.getElementById('notesResult');
+        const scrollToBottomNotes = document.getElementById('scrollToBottomNotes');
+
+        const imagePromptInput = document.getElementById('imagePromptInput');
+        const generateImageButton = document.getElementById('generateImageButton');
+        const imageResultContainer = document.getElementById('imageResultContainer');
+        const imagePlaceholder = document.getElementById('imagePlaceholder');
+        const generatedImage = document.getElementById('generatedImage');
+        const imageLoading = document.getElementById('imageLoading');
+
+        const homeIndicator = document.getElementById('homeIndicator');
+
+        // API URLs
+        // 🔑 PLACE YOUR GEMINI API KEY HERE IF RUNNING OUTSIDE OF CANVAS
+        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=`AIzaSyCwTd3hCS565xebgOB9su_cRB2XRausUS8;
+        // 🖼️ PLACE YOUR IMAGEN API KEY HERE IF RUNNING OUTSIDE OF CANVAS
+        const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=`AIzaSyCwTd3hCS565xebgOB9su_cRB2XRausUS8;
+
+        // --- Utility Functions ---
+        function showLoading(message = 'Loading...') {
+            loadingIndicator.querySelector('p').textContent = message;
+            loadingIndicator.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingIndicator.classList.add('hidden');
+        }
+
+        // Function to update current time and date for status bar
+        function updateTimeAndDate() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            currentTimeSpan.textContent = `${hours}:${minutes}`;
+        }
+
+        // Initialize time and date
+        updateTimeAndDate();
+        setInterval(updateTimeAndDate, 1000); // Update every second for status bar
+
+        // --- View Management ---
+        const interfaces = {
+            'home': homeScreenInterface,
+            'google': googleInterface,
+            'browser': browserInterface,
+            'gemini': geminiAppInterface,
+            'notes': notesAppInterface,
+            'imagegen': imageGenAppInterface,
+        };
+
+        let currentView = 'home'; // Start directly on home screen
+
+        function showView(viewName) {
+            // Hide all interfaces first
+            Object.values(interfaces).forEach(el => el.classList.add('hidden'));
+
+            // Show the requested interface
+            if (interfaces[viewName]) {
+                interfaces[viewName].classList.remove('hidden');
+                currentView = viewName;
+                // When entering Gemini app, ensure it scrolls to the top (newest messages)
+                if (viewName === 'gemini') {
+                    // Only add initial message if chat is empty
+                    if (geminiChatHistory.children.length === 0) {
+                        const initialGeminiMessageDiv = document.createElement('div');
+                        initialGeminiMessageDiv.className = 'bg-blue-100 p-4 rounded-xl self-start max-w-[85%] shadow-sm';
+                        initialGeminiMessageDiv.innerHTML = `<p class="text-sm font-semibold text-blue-800">Gemini</p><p class="text-gray-800 text-base">Hey there! How can I help you today?</p>`;
+                        geminiChatHistory.prepend(initialGeminiMessageDiv); // Prepend for "newest at top"
+                    }
+                    // Scroll to top on entering the app
+                    setTimeout(() => {
+                        geminiChatHistoryContainer.scrollTop = 0;
+                    }, 0);
+                } else if (viewName === 'notes') {
+                    // Scroll to bottom for notes app as well
+                    setTimeout(() => {
+                        const notesContentArea = notesAppInterface.querySelector('.flex-1.flex.flex-col.p-5');
+                        if (notesContentArea) {
+                            notesContentArea.scrollTop = notesContentArea.scrollHeight;
+                        }
+                    }, 0);
+                }
+            }
+        }
+
+        // --- Google Search Functions ---
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                searchResultsDiv.innerHTML = '<p class="text-red-500 text-center mt-4">Please enter a search query.</p>';
+                return;
+            }
+
+            showLoading('Searching Google...');
+            searchResultsDiv.innerHTML = ''; // Clear previous results
+
+            try {
+                const initialSearchSchema = {
+                    type: "ARRAY",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            "query": { "type": "STRING" },
+                            "results": {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        "index": { "type": "STRING" },
+                                        "publication_time": { "type": "STRING" },
+                                        "snippet": { "type": "STRING" },
+                                        "source_title": { "type": "STRING" },
+                                        "url": { "type": "STRING" }
+                                    },
+                                    "propertyOrdering": ["index", "publication_time", "snippet", "source_title", "url"]
+                                }
+                            }
+                        },
+                        "propertyOrdering": ["query", "results"]
+                    }
+                };
+
+                let chatHistoryInitial = [];
+                chatHistoryInitial.push({ role: "user", parts: [{ text: `Perform a Google search for "${query}" and return the results in the following JSON format:\n${JSON.stringify(initialSearchSchema, null, 2)}` }] });
+
+                const payloadInitial = {
+                    contents: chatHistoryInitial,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: initialSearchSchema
+                    }
+                };
+
+                const responseInitial = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payloadInitial)
+                });
+
+                if (!responseInitial.ok) {
+                    throw new Error(`HTTP error! status: ${responseInitial.status}`);
+                }
+
+                const resultInitial = await responseInitial.json();
+                console.log("Initial API Response:", resultInitial);
+
+                let resultsHtml = '';
+                if (resultInitial.candidates && resultInitial.candidates.length > 0 &&
+                    resultInitial.candidates[0].content && resultInitial.candidates[0].content.parts &&
+                    resultInitial.candidates[0].content.parts.length > 0) {
+                    const jsonStringInitial = resultInitial.candidates[0].content.parts[0].text;
+                    try {
+                        const searchData = JSON.parse(jsonStringInitial);
+                        if (searchData && Array.isArray(searchData) && searchData.length > 0) {
+                            const itemsToProcess = searchData[0].results ? searchData[0].results.slice(0, 5) : [];
+
+                            for (const item of itemsToProcess) {
+                                const enhancementSchema = {
+                                    type: "OBJECT",
+                                    properties: {
+                                        "improvedTitle": { "type": "STRING" },
+                                        "improvedSnippet": { "type": "STRING" }
+                                    },
+                                    "propertyOrdering": ["improvedTitle", "improvedSnippet"]
+                                };
+
+                                let chatHistoryEnhancement = [];
+                                chatHistoryEnhancement.push({
+                                    role: "user",
+                                    parts: [{
+                                        text: `Given the search query: "${query}", and an original search result with title: "${item.source_title || ''}" and snippet: "${item.snippet || ''}", please generate a more engaging and descriptive title and snippet for this search result. Provide the output in JSON format with 'improvedTitle' and 'improvedSnippet' keys.`
+                                    }]
+                                });
+
+                                const payloadEnhancement = {
+                                    contents: chatHistoryEnhancement,
+                                    generationConfig: {
+                                        responseMimeType: "application/json",
+                                        responseSchema: enhancementSchema
+                                    }
+                                };
+
+                                const responseEnhancement = await fetch(geminiApiUrl, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(payloadEnhancement)
+                                });
+
+                                if (!responseEnhancement.ok) {
+                                    console.warn(`Warning: Could not enhance result for "${item.source_title}". Status: ${responseEnhancement.status}`);
+                                    const originalTitle = item.source_title || 'No Title';
+                                    const originalSnippet = item.snippet || 'No snippet available.';
+                                    resultsHtml += generateSearchResultCard(item.url, originalTitle, originalSnippet);
+                                    continue;
+                                }
+
+                                const resultEnhancement = await responseEnhancement.json();
+                                console.log("Enhancement API Response:", resultEnhancement);
+
+                                if (resultEnhancement.candidates && resultEnhancement.candidates.length > 0 &&
+                                    resultEnhancement.candidates[0].content && resultEnhancement.candidates[0].content.parts &&
+                                    resultEnhancement.candidates[0].content.parts.length > 0) {
+                                    const jsonStringEnhancement = resultEnhancement.candidates[0].content.parts[0].text;
+                                    try {
+                                        const enhancedData = JSON.parse(jsonStringEnhancement);
+                                        const improvedTitle = enhancedData.improvedTitle || item.source_title || 'No Title';
+                                        const improvedSnippet = enhancedData.improvedSnippet || item.snippet || 'No snippet available.';
+                                        resultsHtml += generateSearchResultCard(item.url, improvedTitle, improvedSnippet);
+                                    } catch (parseErrorEnhancement) {
+                                        console.error("Error parsing enhanced JSON response:", parseErrorEnhancement);
+                                        const originalTitle = item.source_title || 'No Title';
+                                        const originalSnippet = item.snippet || 'No snippet available.';
+                                        resultsHtml += generateSearchResultCard(item.url, originalTitle, originalSnippet);
+                                    }
+                                } else {
+                                    const originalTitle = item.source_title || 'No Title';
+                                    const originalSnippet = item.snippet || 'No snippet available.';
+                                    resultsHtml += generateSearchResultCard(item.url, originalTitle, originalSnippet);
+                                }
+                            }
+                        } else {
+                            resultsHtml = `<p class="text-gray-700">No structured search results found. Raw response: <br>${jsonStringInitial}</p>`;
+                        }
+                    } catch (parseErrorInitial) {
+                        console.error("Error parsing initial JSON response:", parseErrorInitial);
+                        resultsHtml = `<p class="text-red-500 text-center mt-4">Could not parse initial search results. Raw response: <br>${jsonStringInitial}</p>`;
+                    }
+                } else {
+                    resultsHtml = '<p class="text-gray-500 text-center mt-4">No results found for your query.</p>';
+                }
+
+                searchResultsDiv.innerHTML = resultsHtml;
+
+                document.querySelectorAll('.search-link').forEach(link => {
+                    link.addEventListener('click', function(event) {
+                        event.preventDefault();
+                        const url = this.dataset.url || this.href;
+                        openBrowser(url);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error fetching search results:', error);
+                searchResultsDiv.innerHTML = `<p class="text-red-500 text-center mt-4">Error fetching search results: ${error.message}. Please try again.</p>`;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function generateSearchResultCard(url, title, snippet) {
+            return `
+                <div class="bg-white p-4 rounded-lg shadow-md mb-4 border border-gray-200 transition-all duration-200 hover:shadow-lg">
+                    ${url ? `<p class="text-xs text-gray-500 mb-1">${url}</p>` : ''}
+                    ${title ? `<a href="${url || '#'}" class="text-blue-700 hover:underline text-lg font-medium block mb-1 search-link" data-url="${url || ''}">${title}</a>` : ''}
+                    ${snippet ? `<p class="text-gray-700 text-base">${snippet}</p>` : ''}
+                </div>
+            `;
+        }
+
+        async function openBrowser(url) {
+            showView('browser');
+            browserUrlSpan.textContent = url;
+            browserPageTextDiv.innerHTML = '';
+
+            browserLoadingDiv.classList.remove('hidden');
+
+            try {
+                let chatHistoryBrowser = [];
+                chatHistoryBrowser.push({
+                    role: "user",
+                    parts: [{
+                        text: `Generate a short, engaging, and informative paragraph that could serve as the main content for a simulated web page for the URL: "${url}". Make it sound like a real website's summary or introduction. If the URL suggests a specific topic, tailor the content to that topic. If the URL is generic, provide some general interesting facts.`
+                    }]
+                });
+
+                const payloadBrowser = {
+                    contents: chatHistoryBrowser
+                };
+
+                const responseBrowser = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payloadBrowser)
+                });
+
+                if (!responseBrowser.ok) {
+                    throw new Error(`HTTP error! status: ${responseBrowser.status}`);
+                }
+
+                const resultBrowser = await responseBrowser.json();
+                console.log("Browser Content API Response:", resultBrowser);
+
+                if (resultBrowser.candidates && resultBrowser.candidates.length > 0 &&
+                    resultBrowser.candidates[0].content && resultBrowser.candidates[0].content.parts &&
+                    resultBrowser.candidates[0].content.parts.length > 0) {
+                    const generatedContent = resultBrowser.candidates[0].content.parts[0].text;
+                    browserPageTextDiv.innerHTML = `<p class="text-gray-800 text-base leading-relaxed">${generatedContent}</p>`;
+                } else {
+                    browserPageTextDiv.innerHTML = `<p class="text-gray-500">Could not generate content for this page.</p>`;
+                }
+
+            } catch (error) {
+                console.error('Error generating browser content:', error);
+                browserPageTextDiv.innerHTML = `<p class="text-red-500">Error loading page content: ${error.message}.</p>`;
+            } finally {
+                browserLoadingDiv.classList.add('hidden');
+            }
+        }
+
+        // --- Gemini App Functions ---
+        async function sendGeminiMessage() {
+            const message = geminiInput.value.trim();
+            if (!message) return;
+
+            const chatHistory = geminiChatHistory;
+
+            // Add user's message to the top of chat history
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'bg-gray-300 p-4 rounded-xl self-end max-w-[85%] ml-auto shadow-md border border-gray-400';
+            userMessageDiv.innerHTML = `<p class="text-sm font-semibold text-gray-800">You</p><p class="text-gray-800 text-base">${message}</p>`;
+            chatHistory.prepend(userMessageDiv);
+            geminiInput.value = ''; // Clear input
+
+            // Scroll to top immediately after adding user message
+            geminiChatHistoryContainer.scrollTop = 0;
+
+            // Add a "typing" indicator for Gemini at the top
+            const geminiTypingDiv = document.createElement('div');
+            geminiTypingDiv.className = 'bg-blue-100 p-4 rounded-xl self-start max-w-[85%] shadow-sm';
+            geminiTypingDiv.innerHTML = '<p class="text-sm font-semibold text-blue-800">Gemini</p><p class="text-gray-800 text-base">Typing...</p>';
+            chatHistory.prepend(geminiTypingDiv);
+            // Scroll to show typing indicator immediately
+            geminiChatHistoryContainer.scrollTop = 0;
+
+
+            try {
+                let chatHistoryGemini = [];
+                // Include previous messages for context, if desired. For simplicity, just sending the current message.
+                chatHistoryGemini.push({ role: "user", parts: [{ text: message }] });
+
+                const payloadGemini = {
+                    contents: chatHistoryGemini
+                };
+
+                const responseGemini = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payloadGemini)
+                });
+
+                if (!responseGemini.ok) {
+                    throw new Error(`HTTP error! status: ${responseGemini.status}`);
+                }
+
+                const resultGemini = await responseGemini.json();
+                if (resultGemini.candidates && resultGemini.candidates.length > 0 &&
+                    resultGemini.candidates[0].content && resultGemini.candidates[0].content.parts &&
+                    resultGemini.candidates[0].content.parts.length > 0) {
+                    const geminiResponse = resultGemini.candidates[0].content.parts[0].text;
+                    geminiTypingDiv.querySelector('p:last-child').textContent = geminiResponse; // Update typing indicator with response
+                } else {
+                    geminiTypingDiv.querySelector('p:last-child').textContent = "Sorry, I couldn't get a response from Gemini.";
+                }
+            } catch (error) {
+                console.error('Error generating Gemini response:', error);
+                geminiTypingDiv.querySelector('p:last-child').textContent = `Error: ${error.message}`;
+            } finally {
+                // Scroll to top after response immediately
+                geminiChatHistoryContainer.scrollTop = 0;
+            }
+        }
+
+        sendGeminiButton.addEventListener('click', sendGeminiMessage);
+        geminiInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendGeminiMessage();
+            }
+        });
+
+        // Event listener for the new floating Gemini icon
+        scrollToBottomGemini.addEventListener('click', function() {
+            geminiChatHistoryContainer.scrollTop = geminiChatHistoryContainer.scrollHeight; // This button still scrolls to bottom
+            geminiInput.focus(); // Optionally focus the input field
+        });
+
+
+        // --- Notes App Functions ---
+        async function processNotes(promptText, schema = null) {
+            const notesContent = notesInput.value.trim();
+            if (!notesContent) {
+                notesResult.innerHTML = '<p class="text-red-500">Please enter some notes first.</p>';
+                return;
+            }
+
+            showLoading('Processing notes...');
+            notesResult.innerHTML = ''; // Clear previous results
+
+            try {
+                let chatHistoryNotes = [];
+                chatHistoryNotes.push({ role: "user", parts: [{ text: `${promptText}\n\nNotes: ${notesContent}` }] });
+
+                const payloadNotes = {
+                    contents: chatHistoryNotes,
+                    generationConfig: {} // Initialize generationConfig
+                };
+
+                if (schema) {
+                    payloadNotes.generationConfig.responseMimeType = "application/json";
+                    payloadNotes.generationConfig.responseSchema = schema;
+                }
+
+                const responseNotes = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payloadNotes)
+                });
+
+                if (!responseNotes.ok) {
+                    throw new Error(`HTTP error! status: ${responseNotes.status}`);
+                }
+
+                const resultNotes = await responseNotes.json();
+                console.log("Notes API Response:", resultNotes);
+
+                if (resultNotes.candidates && resultNotes.candidates.length > 0 &&
+                    resultNotes.candidates[0].content && resultNotes.candidates[0].content.parts &&
+                    resultNotes.candidates[0].content.parts.length > 0) {
+                    const generatedContent = resultNotes.candidates[0].content.parts[0].text;
+
+                    if (schema) {
+                        try {
+                            const parsedData = JSON.parse(generatedContent);
+                            if (Array.isArray(parsedData)) {
+                                notesResult.innerHTML = '<ul class="list-disc list-inside space-y-1">' +
+                                    parsedData.map(item => `<li>${item}</li>`).join('') +
+                                    '</ul>';
+                            } else if (typeof parsedData === 'object' && parsedData !== null && parsedData.items && Array.isArray(parsedData.items)) {
+                                // Handle cases where schema might return an object with an 'items' array
+                                notesResult.innerHTML = '<ul class="list-disc list-inside space-y-1">' +
+                                    parsedData.items.map(item => `<li>${item}</li>`).join('') +
+                                    '</ul>';
+                            }
+                            else {
+                                notesResult.innerHTML = `<p class="text-gray-700 text-base">${generatedContent}</p>`;
+                            }
+                        } catch (parseError) {
+                            console.error("Error parsing structured JSON response for notes:", parseError);
+                            notesResult.innerHTML = `<p class="text-gray-700 text-base">${generatedContent}</p>`;
+                        }
+                    } else {
+                        notesResult.innerHTML = `<p class="text-gray-700 text-base">${generatedContent}</p>`;
+                    }
+                } else {
+                    notesResult.innerHTML = `<p class="text-gray-500">Could not process notes.</p>`;
+                }
+
+            } catch (error) {
+                console.error('Error processing notes:', error);
+                notesResult.innerHTML = `<p class="text-red-500">Error processing notes: ${error.message}. Please try again.</p>`;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        summarizeNotesButton.addEventListener('click', () => {
+            processNotes("Summarize the following notes concisely:");
+        });
+
+        extractActionItemsButton.addEventListener('click', () => {
+            const actionItemsSchema = {
+                type: "ARRAY",
+                items: { "type": "STRING" },
+                "description": "A list of actionable tasks extracted from the notes."
+            };
+            processNotes("Extract all actionable tasks from the following notes and list them as an array of strings:", actionItemsSchema);
+        });
+
+
+        // --- Image Generator Functions ---
+        async function generateImage() {
+            const prompt = imagePromptInput.value.trim();
+            if (!prompt) {
+                imageResultContainer.innerHTML = '<p class="text-red-500">Please enter a prompt for the image.</p>';
+                return;
+            }
+
+            imagePlaceholder.classList.add('hidden');
+            generatedImage.classList.add('hidden');
+            imageLoading.classList.remove('hidden'); // Show loading spinner
+
+            try {
+                const payload = { instances: { prompt: prompt }, parameters: { "sampleCount": 1} };
+
+                const response = await fetch(imagenApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log("Image Generation API Response:", result);
+
+                if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                    const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                    generatedImage.src = imageUrl;
+                    generatedImage.classList.remove('hidden');
+                    imageResultContainer.innerHTML = ''; // Clear loading and placeholder
+                    imageResultContainer.appendChild(generatedImage);
+                } else {
+                    imageResultContainer.innerHTML = '<p class="text-red-500">Could not generate image. Please try a different prompt.</p>';
+                }
+            } catch (error) {
+                console.error('Error generating image:', error);
+                imageResultContainer.innerHTML = `<p class="text-red-500">Error generating image: ${error.message}. Please try again.</p>`;
+            } finally {
+                imageLoading.classList.add('hidden'); // Hide loading spinner
+            }
+        }
+
+        generateImageButton.addEventListener('click', generateImage);
+        imagePromptInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                generateImage();
+            }
+        });
+
+
+        // --- Event Listeners for App Icons on Home Screen ---
+        function setupAppIconListeners() {
+            document.querySelectorAll('.app-icon[data-app]').forEach(icon => {
+                icon.addEventListener('click', function() {
+                    const appName = this.dataset.app;
+                    showView(appName);
+                });
+            });
+        }
+
+        // Event listener for the search button (within Google app)
+        searchButton.addEventListener('click', performSearch);
+
+        // Event listener for 'Enter' key in the search input
+        searchInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Event listener for the back button in the browser
+        backButton.addEventListener('click', function() {
+            showView('google'); // Go back to Google search results
+        });
+
+        // Event listener for the universal home indicator
+        homeIndicator.addEventListener('click', function() {
+            showView('home'); // Always go back to the home screen
+        });
+
+        // Event listener for the new floating Notes scroll button
+        scrollToBottomNotes.addEventListener('click', function() {
+            const notesContentArea = notesAppInterface.querySelector('.flex-1.flex.flex-col.p-5');
+            if (notesContentArea) {
+                notesContentArea.scrollTop = notesContentArea.scrollHeight;
+                notesInput.focus(); // Optionally focus the input field
+            }
+        });
+
+
+        // Initial setup
+        setupAppIconListeners(); // Attach listeners to all app icons (home screen and drawer)
+        showView('home'); // Start directly on home screen
+    </script>
+</body>
+</html>
